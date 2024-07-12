@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="./niivue.css" />
+  <title>Niivue Mesh</title>
+</head>
+
+<body>
+  <header>
+    <label for="visibleCheck">Mesh Visible</label>
+    <input type="checkbox" id="visibleCheck" checked />
+    <button id="remeshBtn">Create Mesh</button>
+    <button id="saveBtn">Save Mesh</button>
+    <button id="aboutBtn">About Mesh</button>
+    <div id="loadingCircle" class="loading-circle hidden"></div>
+  </header>
+  <main id="canvas-container">
+    <canvas id="gl1"></canvas>
+  </main>
+  <footer id="location">&nbsp;</footer>
+  <dialog id="remeshDialog">
+    <form method="dialog">
+      <p>
+        <label for="isoSlide">Isosurface boundary</label>
+        <input type="range" min="0" max="255" value="108" class="slider" id="isoSlide" />
+      </p>
+      <p>
+        <label>
+          <input type="checkbox" id="bubbleCheck" checked /> Fill bubbles
+        </label>
+      </p>
+      <p>
+        <label>
+          <input type="checkbox" id="largestCheck" /> Largest cluster only
+        </label>
+      </p>
+      <p>
+        <label for="shrinkSlide">Simplify mesh</label>
+        <input type="range" min="2" max="100" value="20" class="slider" id="shrinkSlide" />
+      </p>
+      <button id="cancelBtn" formmethod="dialog">Cancel</button>
+      <button autofocus id="applyBtn" value="default">Apply</button>
+    </form>
+  </dialog>
+  <dialog id="saveDialog">
+    <form method="dialog">
+      <p>
+        <label>
+          Format:
+          <select id="formatSelect">
+            <option>MZ3 small and precise</option>
+            <option selected>OBJ widely supported</option>
+            <option>STL popular for printing</option>
+          </select>
+        </label>
+      </p>
+      <button id="cancelSaveBtn" formmethod="dialog">Cancel</button>
+      <button autofocus id="applySaveBtn" value="default">Save</button>
+    </form>
+  </dialog>
+  <script type="module" src="/main.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "niivue-brainchop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@niivue/niivue": "^0.43.6",
+    "jslint": "^0.12.1"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}
