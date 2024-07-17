@@ -6,16 +6,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="./niivue.css" />
   <title>Niivue Mesh</title>
-  <script type="module" crossorigin src="./assets/index-C2aE5TCB.js"></script>
+  <script type="module" crossorigin src="./assets/index-B665Hfup.js"></script>
 </head>
 
 <body>
   <header>
+    <label for="volumeSelect">Volume</label>
+    <select id="volumeSelect">
+      <option selected>bet</option>
+      <option>Iguana</option>
+      <option>CT_Philips</option>
+      <option>mni152</option>
+      <option>wm.mgz</option>
+      <option>lh.pial</option>
+      <option>fs_LR.32k.L.inflated.surf.gii</option>
+    </select>
+    <label for="shaderSelect">Shader</label>
+    <select id="shaderSelect">
+      <option value="Flat">Flat</option>
+      <option value="Matcap" selected>Matcap</option>
+      <option value="Matte">Matte</option>
+      <option value="Phong">Phong</option>
+    </select>
     <label for="visibleCheck">Mesh Visible</label>
     <input type="checkbox" id="visibleCheck" checked />
     <button id="remeshBtn">Create Mesh</button>
+    <button id="simplifyBtn">Simplify Mesh</button>
     <button id="saveBtn">Save Mesh</button>
-    <button id="aboutBtn">About Mesh</button>
     <div id="loadingCircle" class="loading-circle hidden"></div>
   </header>
   <main id="canvas-container">
@@ -25,25 +42,44 @@
   <dialog id="remeshDialog">
     <form method="dialog">
       <p>
-        <label for="isoSlide">Isosurface boundary</label>
-        <input type="range" min="0" max="255" value="108" class="slider" id="isoSlide" />
+        <label id="isoLabel">Isosurface Threshold</label>
+        <input id="isoNumber" type="text" value="100">
+      <p>
+      <p>
+        <input type="checkbox" id="bubbleCheck" checked/>
+        <label>Fill bubbles</label>
       </p>
       <p>
-        <label>
-          <input type="checkbox" id="bubbleCheck" checked /> Fill bubbles
-        </label>
+        <input type="checkbox" id="largestCheck" unchecked/>
+        <label>Largest cluster only</label>
       </p>
       <p>
-        <label>
-          <input type="checkbox" id="largestCheck" /> Largest cluster only
-        </label>
+        <label for="smoothSlide">Smoothing</label>
+        <input
+          type="range"
+          min="0"
+          max="20"
+          value="5"
+          class="slider"
+          id="smoothSlide"
+        />
       </p>
       <p>
-        <label for="shrinkSlide">Simplify mesh</label>
-        <input type="range" min="2" max="100" value="20" class="slider" id="shrinkSlide" />
+        <label>Simplify Percent (1..100)</label>
+        <input id="shrinkPct" type="number" min="1"  value="100" max="100">
       </p>
       <button id="cancelBtn" formmethod="dialog">Cancel</button>
       <button autofocus id="applyBtn" value="default">Apply</button>
+    </form>
+  </dialog>
+  <dialog id="simplifyDialog">
+    <form method="dialog">
+      <p>
+        <label>Simplify Percent (1..100)</label>
+        <input id="shrinkSimplePct" type="number" min="1"  value="10" max="100">
+      </p>
+      <button id="cancelBtn" formmethod="dialog">Cancel</button>
+      <button autofocus id="applySimpleBtn" value="default">Apply</button>
     </form>
   </dialog>
   <dialog id="saveDialog">
