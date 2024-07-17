@@ -13,7 +13,7 @@ class QuadricSimplifyMesh {
   constructor(vs, ts, targetCount, aggressiveness = 7, finishLossless = false, verbose = true) {
     this.vertices = []
     this.triangles = []
-    this.refs = []
+    this.refs = new Array(ts.length) // Pre-allocate memory
     this.targetCount = targetCount
     this.aggressiveness = aggressiveness
     this.finishLossless = finishLossless
@@ -27,7 +27,7 @@ class QuadricSimplifyMesh {
         p: { x: vs[i], y: vs[i + 1], z: vs[i + 2] },
         tstart: 0,
         tcount: 0,
-        q: Array(10).fill(0),
+        q: new Float32Array(10).fill(0),
         border: 0
       })
     }
@@ -35,7 +35,7 @@ class QuadricSimplifyMesh {
     for (let i = 0; i < ts.length; i += 3) {
       this.triangles.push({
         v: [ts[i], ts[i + 1], ts[i + 2]],
-        err: Array(4).fill(0),
+        err: new Float32Array(4).fill(0),
         dirty: false,
         deleted: false,
         n: { x: 0, y: 0, z: 0 }
@@ -44,9 +44,7 @@ class QuadricSimplifyMesh {
   }
 
   symMat1(ret, c) {
-    for (let i = 0; i < 10; i++) {
-      ret[i] = c
-    }
+    ret.fill(c)
   }
 
   symMat4(ret, a, b, c, d) {
@@ -76,19 +74,9 @@ class QuadricSimplifyMesh {
   }
 
   symMatAdd(ret, n, m) {
-    this.symMat10(
-      ret,
-      n[0] + m[0],
-      n[1] + m[1],
-      n[2] + m[2],
-      n[3] + m[3],
-      n[4] + m[4],
-      n[5] + m[5],
-      n[6] + m[6],
-      n[7] + m[7],
-      n[8] + m[8],
-      n[9] + m[9]
-    )
+    for (let i = 0; i < 10; i++) {
+      ret[i] = n[i] + m[i]
+    }
   }
 
   symMatDet(m, a11, a12, a13, a21, a22, a23, a31, a32, a33) {
@@ -102,26 +90,22 @@ class QuadricSimplifyMesh {
     )
   }
 
-  ptf(x, y, z) {
-    return { x, y, z }
-  }
-
   vCross(v1, v2) {
-    return this.ptf(v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x)
+    return { x: v1.y * v2.z - v1.z * v2.y, y: v1.z * v2.x - v1.x * v2.z, z: v1.x * v2.y - v1.y * v2.x }
   }
 
   vSum(a, b) {
-    return this.ptf(a.x + b.x, a.y + b.y, a.z + b.z)
+    return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
   }
 
   vSubtract(a, b) {
-    return this.ptf(a.x - b.x, a.y - b.y, a.z - b.z)
+    return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
   }
 
   vNormalize(v) {
-    let len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+    const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
     if (len <= 0) {
-      len = 0.001
+      return
     }
     v.x /= len
     v.y /= len
@@ -133,7 +117,7 @@ class QuadricSimplifyMesh {
   }
 
   vMult(a, v) {
-    return this.ptf(a.x * v, a.y * v, a.z * v)
+    return { x: a.x * v, y: a.y * v, z: a.z * v }
   }
 
   vertexError(q, x, y, z) {
@@ -151,20 +135,42 @@ class QuadricSimplifyMesh {
     )
   }
 
-  calculateError(id_v1, id_v2, p_result) {
-    const q = Array(10).fill(0)
+  calculateErrorFast(id_v1, id_v2) {
+    const q = new Float32Array(10)
     this.symMatAdd(q, this.vertices[id_v1].q, this.vertices[id_v2].q)
     const border = this.vertices[id_v1].border + this.vertices[id_v2].border
     const det = this.symMatDet(q, 0, 1, 2, 1, 4, 5, 2, 5, 7)
 
     if (det !== 0.0 && border === 0) {
-      p_result.x = (-1.0 / det) * this.symMatDet(q, 1, 2, 3, 4, 5, 6, 5, 7, 8) // vx = A41/det(q_delta)
-      p_result.y = (1.0 / det) * this.symMatDet(q, 0, 2, 3, 1, 5, 6, 2, 7, 8) // vy = A42/det(q_delta)
-      p_result.z = (-1.0 / det) * this.symMatDet(q, 0, 1, 3, 1, 4, 6, 2, 5, 8) // vz = A43/det(q_delta)
+      const x = (-1.0 / det) * this.symMatDet(q, 1, 2, 3, 4, 5, 6, 5, 7, 8)
+      const y = (1.0 / det) * this.symMatDet(q, 0, 2, 3, 1, 5, 6, 2, 7, 8)
+      const z = (-1.0 / det) * this.symMatDet(q, 0, 1, 3, 1, 4, 6, 2, 5, 8)
+      return this.vertexError(q, x, y, z)
+    }
+
+    const p1 = this.vertices[id_v1].p
+    const p2 = this.vertices[id_v2].p
+    const p3 = this.vMult(this.vSum(p1, p2), 0.5)
+    const error1 = this.vertexError(q, p1.x, p1.y, p1.z)
+    const error2 = this.vertexError(q, p2.x, p2.y, p2.z)
+    const error3 = this.vertexError(q, p3.x, p3.y, p3.z)
+    const error = Math.min(error1, Math.min(error2, error3))
+    return error
+  }
+
+  calculateError(id_v1, id_v2, p_result) {
+    const q = new Float32Array(10)
+    this.symMatAdd(q, this.vertices[id_v1].q, this.vertices[id_v2].q)
+    const border = this.vertices[id_v1].border + this.vertices[id_v2].border
+    const det = this.symMatDet(q, 0, 1, 2, 1, 4, 5, 2, 5, 7)
+
+    if (det !== 0.0 && border === 0) {
+      p_result.x = (-1.0 / det) * this.symMatDet(q, 1, 2, 3, 4, 5, 6, 5, 7, 8)
+      p_result.y = (1.0 / det) * this.symMatDet(q, 0, 2, 3, 1, 5, 6, 2, 7, 8)
+      p_result.z = (-1.0 / det) * this.symMatDet(q, 0, 1, 3, 1, 4, 6, 2, 5, 8)
       return this.vertexError(q, p_result.x, p_result.y, p_result.z)
     }
 
-    // det = 0 -> try to find best result
     const p1 = this.vertices[id_v1].p
     const p2 = this.vertices[id_v2].p
     const p3 = this.vMult(this.vSum(p1, p2), 0.5)
@@ -173,13 +179,13 @@ class QuadricSimplifyMesh {
     const error3 = this.vertexError(q, p3.x, p3.y, p3.z)
     const error = Math.min(error1, Math.min(error2, error3))
     if (error1 === error) {
-      Object.assign(p_result, p1)
+      p_result = p1
     }
     if (error2 === error) {
-      Object.assign(p_result, p2)
+      p_result = p2
     }
     if (error3 === error) {
-      Object.assign(p_result, p3)
+      p_result = p3
     }
     return error
   }
@@ -189,8 +195,7 @@ class QuadricSimplifyMesh {
       let dst = 0
       for (let i = 0; i < this.triangles.length; i++) {
         if (!this.triangles[i].deleted) {
-          this.triangles[dst] = this.triangles[i]
-          dst++
+          this.triangles[dst++] = this.triangles[i]
         }
       }
       this.triangles.length = dst
@@ -214,16 +219,6 @@ class QuadricSimplifyMesh {
       vertex.tcount = 0
     }
 
-    /* let maxRef = 0;
-    for (let i = 0; i < this.triangles.length; i++) {
-      let t = this.triangles[i];
-      for (let j = 0; j < 3; j++) {
-        let v = this.vertices[t.v[j]];
-        maxRef = Math.max(v.tstart + v.tcount, maxRef);
-      }
-    }
-console.log("mork >>", maxRef, this.triangles.length * 3) */
-    // Write References
     this.refs.length = this.triangles.length * 3
     for (let i = 0; i < this.triangles.length; i++) {
       const t = this.triangles[i]
@@ -233,6 +228,7 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
         v.tcount++
       }
     }
+
     if (iteration !== 0) {
       return
     }
@@ -241,8 +237,8 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
       vertex.border = 0
     }
 
-    const vids = new Array(this.vertices.length).fill(0)
-    const vcount = new Array(this.vertices.length).fill(0)
+    const vids = new Uint32Array(this.vertices.length)
+    const vcount = new Uint32Array(this.vertices.length)
 
     for (let i = 0; i < this.vertices.length; i++) {
       let nvcount = 0
@@ -289,7 +285,7 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
       this.vNormalize(n)
       t.n = n
       for (let j = 0; j < 3; j++) {
-        const q = Array(10).fill(0)
+        const q = new Float32Array(10)
         this.symMat4(q, n.x, n.y, n.z, -this.vDot(n, p[0]))
         this.symMatAdd(this.vertices[t.v[j]].q, this.vertices[t.v[j]].q, q)
       }
@@ -297,9 +293,8 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
 
     for (let i = 0; i < this.triangles.length; i++) {
       const t = this.triangles[i]
-      const p = {}
       for (let j = 0; j < 3; j++) {
-        t.err[j] = this.calculateError(t.v[j], t.v[(j + 1) % 3], p)
+        t.err[j] = this.calculateErrorFast(t.v[j], t.v[(j + 1) % 3])
       }
       t.err[3] = Math.min(t.err[0], Math.min(t.err[1], t.err[2]))
     }
@@ -341,7 +336,6 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
   }
 
   updateTriangles(i0, v, deleted, deletedTriangles) {
-    const p = {}
     for (let k = 0; k < v.tcount; k++) {
       const r = this.refs[v.tstart + k]
       const t = this.triangles[r.tid]
@@ -355,9 +349,9 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
       }
       t.v[r.tvertex] = i0
       t.dirty = true
-      t.err[0] = this.calculateError(t.v[0], t.v[1], p)
-      t.err[1] = this.calculateError(t.v[1], t.v[2], p)
-      t.err[2] = this.calculateError(t.v[2], t.v[0], p)
+      t.err[0] = this.calculateErrorFast(t.v[0], t.v[1])
+      t.err[1] = this.calculateErrorFast(t.v[1], t.v[2])
+      t.err[2] = this.calculateErrorFast(t.v[2], t.v[0])
       t.err[3] = Math.min(t.err[0], Math.min(t.err[1], t.err[2]))
       this.refs.push(r)
     }
@@ -396,7 +390,6 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
 
   simplify(verbose = true) {
     let deletedTriangles = 0
-    // const vertexCount = this.vertices.length
     const triangleCount = this.triangles.length
     const deleted0 = new Array(triangleCount * 3).fill(false) // overprovision
     const deleted1 = new Array(triangleCount * 3).fill(false) // overprovision
@@ -466,7 +459,7 @@ console.log("mork >>", maxRef, this.triangles.length * 3) */
             if (v0.border !== v1.border) {
               continue
             }
-            const p = {}
+            const p = { x: 0, y: 0, z: 0 }
             this.calculateError(i0, i1, p)
             if (this.flipped(p, i0, i1, v0, v1, deleted0)) {
               continue

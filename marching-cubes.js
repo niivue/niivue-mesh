@@ -1,4 +1,3 @@
-import { gzipSync } from 'fflate'
 import { BWLabeler } from './bwlabels.js'
 
 // https://raw.githubusercontent.com/Twinklebear/webgl-marching-cubes/master/js/marching-cubes.js
@@ -448,7 +447,7 @@ function sortVerticesByDistance(vertices) {
   return distances
 }
 
-function unifyVertices(vertices, triangles, verbose = false) {
+function unifyVertices(vertices, triangles, isVerbose = false) {
   // Extract the first vertex
   const nVtx = vertices.length / 3
   const xyz0 = [vertices[0], vertices[1], vertices[2]]
@@ -494,7 +493,7 @@ function unifyVertices(vertices, triangles, verbose = false) {
     nVtxUnique++
   }
   if (nVtx === nVtxUnique) {
-    if (verbose) {
+    if (isVerbose) {
       console.log('Unify vertices found no shared vertices')
     }
     return { vertices, triangles }
@@ -512,13 +511,35 @@ function unifyVertices(vertices, triangles, verbose = false) {
   for (let i = 0; i < triangles.length; i++) {
     triangles[i] = triRemaps[triangles[i]]
   }
-  if (verbose) {
+  if (isVerbose) {
     console.log(`Vertex welding ${nVtx} -> ${nVtxUnique}`)
   }
   return { vertices: newVertices, triangles }
 }
 
-function verticesVox2mm(vertices, affine) {
+function isPositiveDeterminant(matrix) {
+  // Calculate the determinant of the 3x3 matrix
+  const det =
+    matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) -
+    matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0]) +
+    matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
+
+  // Return true if the determinant is positive, otherwise false
+  return det > 0
+}
+
+function reverseMeshFaces(tris) {
+  for (let i = 0; i < tris.length; i += 3) {
+    // Swap the second and third elements of each triangle
+    const temp = tris[i + 1]
+    tris[i + 1] = tris[i + 2]
+    tris[i + 2] = temp
+  }
+  return tris
+}
+
+function verticesVox2mm(mesh, affine) {
+  const vertices = mesh.vertices
   for (let i = 0; i < vertices.length; i += 3) {
     const xyz = [vertices[i], vertices[i + 1], vertices[i + 2]]
     // translate 0.5 voxels: NIfTI SForm from voxel centers
@@ -529,10 +550,14 @@ function verticesVox2mm(vertices, affine) {
     vertices[i + 1] = xyz[0] * affine[1][0] + xyz[1] * affine[1][1] + xyz[2] * affine[1][2] + affine[1][3]
     vertices[i + 2] = xyz[0] * affine[2][0] + xyz[1] * affine[2][1] + xyz[2] * affine[2][2] + affine[2][3]
   }
-  return vertices
+  const isPos = isPositiveDeterminant(affine)
+  if (!isPos) {
+    mesh.triangles = reverseMeshFaces(mesh.triangles)
+  }
+  return mesh
 }
 
-function cullDegenerateTriangles(triangles, verbose = true) {
+function cullDegenerateTriangles(triangles, isVerbose = true) {
   let tris = triangles
   const nTri = tris.length / 3
   let nOK = 0
@@ -548,7 +573,7 @@ function cullDegenerateTriangles(triangles, verbose = true) {
   if (nOK === 0) {
     throw new Error('invalid mesh: no valid triangles')
   }
-  if (verbose) {
+  if (isVerbose) {
     console.log(`${nTri - nOK} of the ${nTri} triangles are degenerate`)
   }
   tris = triangles.slice()
@@ -657,7 +682,7 @@ function fillh(imgBin, dim, is26 = true) {
   return imgBin
 }
 
-function fillBubbles(img, dims, isovalue = 1) {
+function fillBubbles(img, dims, isovalue = 1, isVerbose = false) {
   // TODO check with binary input: isovalue might be off by 1
   let img01 = img.map((value) => (value >= isovalue ? 1 : 0))
   const countNonZero = img01.reduce((count, value) => count + (value !== 0 ? 1 : 0), 0)
@@ -666,7 +691,9 @@ function fillBubbles(img, dims, isovalue = 1) {
   if (countNonZero === countFilledNonZero) {
     return img
   }
-  console.log(`${countFilledNonZero - countNonZero} voxels were bubbles`)
+  if (isVerbose) {
+    console.log(`${countFilledNonZero - countNonZero} voxels were bubbles`)
+  }
   const isovalue1 = isovalue + 1
   for (let i = 0; i < img.length; i++) {
     if (img01[i] === 0) {
@@ -727,30 +754,158 @@ function zeroVolumeEdges(img, dims) {
   return img
 }
 
+function laplacian_smooth(verts, tris) {
+  const nvert = verts.length / 3
+  const ntri = tris.length / 3
+  const sum = new Float64Array(nvert * 3).fill(0)
+  const num = new Float64Array(nvert).fill(0)
+
+  for (let i = 0; i < ntri; i++) {
+    // Each point of a triangle has two neighbors:
+    const p0 = tris[i * 3]
+    const p1 = tris[i * 3 + 1]
+    const p2 = tris[i * 3 + 2]
+
+    num[p0] += 2
+    sum[p0 * 3] += verts[p1 * 3] + verts[p2 * 3]
+    sum[p0 * 3 + 1] += verts[p1 * 3 + 1] + verts[p2 * 3 + 1]
+    sum[p0 * 3 + 2] += verts[p1 * 3 + 2] + verts[p2 * 3 + 2]
+
+    num[p1] += 2
+    sum[p1 * 3] += verts[p0 * 3] + verts[p2 * 3]
+    sum[p1 * 3 + 1] += verts[p0 * 3 + 1] + verts[p2 * 3 + 1]
+    sum[p1 * 3 + 2] += verts[p0 * 3 + 2] + verts[p2 * 3 + 2]
+
+    num[p2] += 2
+    sum[p2 * 3] += verts[p0 * 3] + verts[p1 * 3]
+    sum[p2 * 3 + 1] += verts[p0 * 3 + 1] + verts[p1 * 3 + 1]
+    sum[p2 * 3 + 2] += verts[p0 * 3 + 2] + verts[p1 * 3 + 2]
+  }
+
+  for (let i = 0; i < nvert; i++) {
+    if (num[i] <= 0) {
+      continue
+    }
+    verts[i * 3] = sum[i * 3] / num[i]
+    verts[i * 3 + 1] = sum[i * 3 + 1] / num[i]
+    verts[i * 3 + 2] = sum[i * 3 + 2] / num[i]
+  }
+}
+
+function laplacian_smoothHC(verts, tris, iter = 100, alpha = 0.1, beta = 0.5, lockEdges = true) {
+  if (iter < 1) {
+    return
+  }
+  const nvert = verts.length / 3
+  const ntri = tris.length / 3
+  const alpha1 = 1.0 - alpha
+  const beta1 = 1.0 - beta
+
+  // let p = new Array(nvert * 3).fill(0);
+  const q = new Float32Array(nvert * 3).fill(0)
+  const b = new Array(nvert * 3).fill(0)
+  // Copy verts to p
+  // p.set(verts);
+  const p = new Float32Array(verts)
+
+  for (let j = 0; j < iter; j++) {
+    // Copy p to q
+    q.set(p)
+
+    // Laplacian smooth on p
+    laplacian_smooth(p, tris)
+
+    for (let i = 0; i < nvert; i++) {
+      const pi = i * 3
+      const vi = i * 3
+
+      b[pi] = p[pi] - (alpha * verts[vi] + alpha1 * q[pi])
+      b[pi + 1] = p[pi + 1] - (alpha * verts[vi + 1] + alpha1 * q[pi + 1])
+      b[pi + 2] = p[pi + 2] - (alpha * verts[vi + 2] + alpha1 * q[pi + 2])
+    }
+
+    // Copy b to q
+    q.set(b)
+
+    // Laplacian smooth on q
+    laplacian_smooth(q, tris)
+
+    for (let i = 0; i < nvert; i++) {
+      const pi = i * 3
+
+      p[pi] = p[pi] - (beta * b[pi] + beta1 * q[pi])
+      p[pi + 1] = p[pi + 1] - (beta * b[pi + 1] + beta1 * q[pi + 1])
+      p[pi + 2] = p[pi + 2] - (beta * b[pi + 2] + beta1 * q[pi + 2])
+    }
+  }
+
+  if (!lockEdges) {
+    verts.set(p)
+    return
+  }
+
+  // Find border edges and only update non-border vertices
+  const vertices = new Array(nvert).fill(null).map(() => ({ border: false, p: [0, 0, 0] }))
+  for (let i = 0; i < nvert; i++) {
+    vertices[i].p = [verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]]
+  }
+
+  const triangles = new Array(ntri).fill(null).map(() => ({ deleted: 0, v: [0, 0, 0] }))
+  for (let i = 0; i < ntri; i++) {
+    triangles[i].v[0] = tris[i * 3]
+    triangles[i].v[1] = tris[i * 3 + 1]
+    triangles[i].v[2] = tris[i * 3 + 2]
+  }
+
+  // Placeholder functions for mesh update logic
+  function update_mesh() {
+    // Implement mesh update logic
+  }
+
+  update_mesh(0, triangles, vertices, [], 0, ntri, nvert)
+
+  for (let i = 0; i < nvert; i++) {
+    if (vertices[i].border) {
+      continue
+    }
+    verts[i * 3] = p[i * 3]
+    verts[i * 3 + 1] = p[i * 3 + 1]
+    verts[i * 3 + 2] = p[i * 3 + 2]
+  }
+}
+
 export function voxels2mesh(
   img,
   dims,
   isovalue,
   isLargestClusterOnly = false,
   isFillBubbles = false,
+  smoothIterations = 5,
   affine = [],
-  verbose = true
+  isVerbose = true
 ) {
-  if (!(img instanceof Uint8Array) && !(img instanceof Uint8ClampedArray)) {
-    throw new Error('img must be a Uint8Array')
-  }
-  if (isovalue < 0 || isovalue > 255) {
-    throw new Error('isovalue must be in the range 0..255')
-  }
   if (dims[0] < 3 || dims[1] < 3 || dims[2] < 3) {
     throw new Error('volume too small for meshification')
+  }
+  if (isovalue < 0) {
+    // marching cubes implementation assumes positive values
+    let mn = img[0]
+    for (let i = 0; i < img.length; i++) {
+      mn = Math.min(img[i], mn)
+    }
+    if (mn < 0) {
+      for (let i = 0; i < img.length; i++) {
+        img[i] = img[i] - mn
+      }
+      isovalue = isovalue - mn
+    }
   }
   img = zeroVolumeEdges(img, dims)
   if (isLargestClusterOnly) {
     img = largestClusterOnly(img, dims, isovalue)
   }
   if (isFillBubbles) {
-    img = fillBubbles(img, dims, isovalue)
+    img = fillBubbles(img, dims, isovalue, isVerbose)
   }
   let mesh = []
   mesh.vertices = marchingCubesJS(img, dims, isovalue)
@@ -762,148 +917,16 @@ export function voxels2mesh(
   for (let i = 0; i < mesh.triangles.length; i++) {
     mesh.triangles[i] = i
   }
-  mesh = unifyVertices(mesh.vertices, mesh.triangles, verbose)
-  if (verbose) {
+  mesh = unifyVertices(mesh.vertices, mesh.triangles, isVerbose)
+  if (isVerbose) {
     console.log(`Vertices ${mesh.vertices.length / 3} Triangles ${mesh.triangles.length / 3}`)
   }
   // these algoritms should never yield degenerate triangles, but lets check
-  mesh.triangles = cullDegenerateTriangles(mesh.triangles, verbose)
+  mesh.triangles = cullDegenerateTriangles(mesh.triangles, isVerbose)
+  laplacian_smoothHC(mesh.vertices, mesh.triangles, smoothIterations)
   // optional affine is a 4x4 spatial transformation matrix
   if (affine.length === 4) {
-    mesh.vertices = verticesVox2mm(mesh.vertices, affine)
+    mesh = verticesVox2mm(mesh, affine)
   }
   return { vertices: mesh.vertices, triangles: mesh.triangles }
-}
-
-export function createMZ3(vertices, indices, compress = false) {
-  // generate binary MZ3 format mesh
-  // n.b. small, precise and small but support is not widespread
-  // n.b. result can be compressed with gzip
-  // https://github.com/neurolabusc/surf-ice/tree/master/mz3
-  const magic = 23117
-  const attr = 3
-  const nface = indices.length / 3
-  const nvert = vertices.length / 3
-  const nskip = 0
-  // Calculate buffer size
-  const headerSize = 16
-  const indexSize = nface * 3 * 4 // Uint32Array
-  const vertexSize = nvert * 3 * 4 // Float32Array
-  const totalSize = headerSize + indexSize + vertexSize
-  const buffer = new ArrayBuffer(totalSize)
-  const writer = new DataView(buffer)
-  // Write header
-  writer.setUint16(0, magic, true)
-  writer.setUint16(2, attr, true)
-  writer.setUint32(4, nface, true)
-  writer.setUint32(8, nvert, true)
-  writer.setUint32(12, nskip, true)
-  // Write indices
-  let offset = headerSize
-  new Uint32Array(buffer, offset, indices.length).set(indices)
-  offset += indexSize
-  // Write vertices
-  new Float32Array(buffer, offset, vertices.length).set(vertices)
-  if (compress) {
-    return gzipSync(new Uint8Array(buffer))
-  }
-  return buffer
-}
-
-function createOBJ(vertices, indices) {
-  // generate binary OBJ format mesh
-  // n.b. widespread support, but large and slow due to ASCII
-  // https://en.wikipedia.org/wiki/Wavefront_.obj_file
-  let objContent = ''
-  // Add vertices to OBJ content
-  for (let i = 0; i < vertices.length; i += 3) {
-    objContent += `v ${vertices[i]} ${vertices[i + 1]} ${vertices[i + 2]}\n`
-  }
-  // Add faces to OBJ content (OBJ indices start at 1, not 0)
-  for (let i = 0; i < indices.length; i += 3) {
-    objContent += `f ${indices[i] + 1} ${indices[i + 1] + 1} ${indices[i + 2] + 1}\n`
-  }
-  // Encode the OBJ content as an ArrayBuffer
-  const encoder = new TextEncoder()
-  const arrayBuffer = encoder.encode(objContent).buffer
-  return arrayBuffer
-}
-
-function createSTL(vertices, indices) {
-  // generate binary STL format mesh
-  // n.b. inefficient and slow as vertices are not reused
-  // https://en.wikipedia.org/wiki/STL_(file_format)#Binary
-  const numTriangles = indices.length / 3
-  const bufferLength = 84 + numTriangles * 50
-  const arrayBuffer = new ArrayBuffer(bufferLength)
-  const dataView = new DataView(arrayBuffer)
-  // Write header (80 bytes)
-  for (let i = 0; i < 80; i++) {
-    dataView.setUint8(i, 0)
-  }
-  // Write number of triangles (4 bytes)
-  dataView.setUint32(80, numTriangles, true)
-  let offset = 84
-  for (let i = 0; i < indices.length; i += 3) {
-    const i0 = indices[i] * 3
-    const i1 = indices[i + 1] * 3
-    const i2 = indices[i + 2] * 3
-    // Normal vector (12 bytes, set to zero)
-    dataView.setFloat32(offset, 0, true) // Normal X
-    dataView.setFloat32(offset + 4, 0, true) // Normal Y
-    dataView.setFloat32(offset + 8, 0, true) // Normal Z
-    offset += 12
-    // Vertex 1 (12 bytes)
-    dataView.setFloat32(offset, vertices[i0], true) // Vertex 1 X
-    dataView.setFloat32(offset + 4, vertices[i0 + 1], true) // Vertex 1 Y
-    dataView.setFloat32(offset + 8, vertices[i0 + 2], true) // Vertex 1 Z
-    offset += 12
-    // Vertex 2 (12 bytes)
-    dataView.setFloat32(offset, vertices[i1], true) // Vertex 2 X
-    dataView.setFloat32(offset + 4, vertices[i1 + 1], true) // Vertex 2 Y
-    dataView.setFloat32(offset + 8, vertices[i1 + 2], true) // Vertex 2 Z
-    offset += 12
-    // Vertex 3 (12 bytes)
-    dataView.setFloat32(offset, vertices[i2], true) // Vertex 3 X
-    dataView.setFloat32(offset + 4, vertices[i2 + 1], true) // Vertex 3 Y
-    dataView.setFloat32(offset + 8, vertices[i2 + 2], true) // Vertex 3 Z
-    offset += 12
-    // Attribute byte count (2 bytes, set to zero)
-    dataView.setUint16(offset, 0, true)
-    offset += 2
-  }
-  return arrayBuffer
-}
-
-function downloadArrayBuffer(buffer, filename) {
-  const blob = new Blob([buffer], { type: 'application/octet-stream' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.style.display = 'none'
-  a.click()
-  setTimeout(() => {
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }, 0)
-}
-
-export function downloadMesh(vertices, indices, filename, compress = false) {
-  let buff = []
-  if (/\.obj$/i.test(filename)) {
-    buff = createOBJ(vertices, indices)
-  } else if (/\.stl$/i.test(filename)) {
-    buff = createSTL(vertices, indices)
-  } else {
-    if (!/\.mz3$/i.test(filename)) {
-      filename += '.mz3'
-    }
-    buff = createMZ3(vertices, indices, compress)
-  }
-  if (filename.length > 4) {
-    downloadArrayBuffer(buff, filename)
-  }
-  return buff
 }

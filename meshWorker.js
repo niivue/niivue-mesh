@@ -1,15 +1,14 @@
-import { voxels2mesh, createMZ3, downloadMesh } from './marching-cubes.js';
-import { simplifyJS } from './simplify.js';
+import { simplifyJS } from './simplify.js'
 
 self.onmessage = function (e) {
-  const { img, dims, isoValue, largestCheck, bubbleCheck, affine, shrinkValue } = e.data;
-  const imgArray = new Uint8ClampedArray(img);
-  
-  let mesh = voxels2mesh(imgArray, dims, isoValue, largestCheck, bubbleCheck, affine);
-  mesh = simplifyJS(mesh.vertices, mesh.triangles, shrinkValue);
-
+  const { verts, tris, shrinkValue, verbose = true } = e.data
+  const startTime = new Date()
+  const mesh = simplifyJS(verts, tris, shrinkValue)
+  if (verbose) {
+    console.log(new Date() - startTime + 'ms elapsed')
+  }
   postMessage({
     vertices: mesh.vertices,
     triangles: mesh.triangles
-  });
-};
+  })
+}
