@@ -1,5 +1,5 @@
-import { Niivue } from '@niivue/niivue';
-import { createMZ3, downloadMesh } from './marching-cubes.js';
+import { Niivue, NVMeshUtilities } from '@niivue/niivue';
+import { createMZ3 } from './marching-cubes.js';
 
 // Dynamically load the worker module
 async function createWorker() {
@@ -37,15 +37,19 @@ async function main() {
     if (nv1.meshes.length < 1) {
       return;
     }
+    let format = 'obj'
+    let isCompressed = false;
     if (formatSelect.selectedIndex == 0) {
-      downloadMesh(nv1.meshes[0].pts, nv1.meshes[0].tris, 'simplified_mesh.mz3', true);
+      format = 'mz3';
+      isCompressed = true;
     }
     if (formatSelect.selectedIndex == 1) {
-      downloadMesh(nv1.meshes[0].pts, nv1.meshes[0].tris, 'simplified_mesh.obj');
+      format = 'obj';
     }
     if (formatSelect.selectedIndex == 2) {
-      downloadMesh(nv1.meshes[0].pts, nv1.meshes[0].tris, 'simplified_mesh.stl');
+      format = 'stl';
     }
+    NVMeshUtilities.saveMesh(nv1.meshes[0].pts, nv1.meshes[0].tris, `simplified_mesh.${format}`, isCompressed);
   };
 
   remeshBtn.onclick = function () {

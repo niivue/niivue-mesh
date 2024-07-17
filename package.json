@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@niivue/niivue": "^0.43.6",
+    "@niivue/niivue": "^0.44.1",
     "jslint": "^0.12.1"
   },
   "devDependencies": {
