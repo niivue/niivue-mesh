@@ -28,23 +28,30 @@ function formatNumber(value) {
 async function main() {
   const MeshWorker = await createMeshWorker()
   const VoxelWorker = await createVoxelWorker()
+  const Nii2meshWorker = new Worker('./nii2meshWorker.js?rnd=' + Math.random())
   const loadingCircle = document.getElementById('loadingCircle')
-  function meshStatus() {
-    const str = `Mesh has ${nv1.meshes[0].pts.length / 3} vertices and ${nv1.meshes[0].tris.length / 3} triangles`
+  let startTime = Date.now()
+  function meshStatus(isTimed = true) {
+    let str = `Mesh has ${nv1.meshes[0].pts.length / 3} vertices and ${nv1.meshes[0].tris.length / 3} triangles`
+    if (isTimed)
+      str += ` ${Date.now() - startTime}ms`
     document.getElementById('location').innerHTML = str
+    console.log(str)
     shaderSelect.onchange()
-    nv1.setMeshProperty(nv1.meshes[0].id, 'visible', visibleCheck.checked)
   }
-  async function loadMesh(vertices, triangles) {
+  async function loadMz3(meshBuffer) {
     if (nv1.meshes.length > 0) {
       nv1.removeMesh(nv1.meshes[0])
     }
-    const verticesArray = new Float32Array(vertices)
-    const trianglesArray = new Uint32Array(triangles)
-    const meshBuffer = NVMeshUtilities.createMZ3(verticesArray, trianglesArray, false)
     await nv1.loadFromArrayBuffer(meshBuffer, 'test.mz3')
     loadingCircle.classList.add('hidden')
     meshStatus()
+  }
+  async function loadMesh(vertices, triangles) {
+    const verticesArray = new Float32Array(vertices)
+    const trianglesArray = new Uint32Array(triangles)
+    const meshBuffer = NVMeshUtilities.createMZ3(verticesArray, trianglesArray, false)
+    await loadMz3(meshBuffer)
   }
   MeshWorker.onmessage = async function (e) {
     const { vertices, triangles } = e.data
@@ -53,6 +60,15 @@ async function main() {
   VoxelWorker.onmessage = async function (e) {
     const { vertices, triangles } = e.data
     await loadMesh(vertices, triangles)
+  }
+  Nii2meshWorker.onmessage = async function (e) {
+    if (e.data.blob instanceof Blob) {
+        var reader = new FileReader()
+        reader.onload = () => {
+            loadMz3(reader.result)
+        }
+        reader.readAsArrayBuffer(e.data.blob)
+    }
   }
   saveBtn.onclick = function () {
     if (nv1.meshes.length < 1) {
@@ -65,9 +81,9 @@ async function main() {
     const selectedOption = volumeSelect.options[volumeSelect.selectedIndex]
     const txt = selectedOption.text
     let fnm = './' + txt
-    if (volumeSelect.selectedIndex > 3) {
+    if (volumeSelect.selectedIndex > 4) {
       fnm = 'https://niivue.github.io/niivue/images/' + txt
-    } else if (volumeSelect.selectedIndex > 0) {
+    } else if (volumeSelect.selectedIndex > 1) {
       fnm = 'https://niivue.github.io/niivue-demo-images/' + txt
     }
     if (nv1.meshes.length > 0) {
@@ -76,7 +92,7 @@ async function main() {
     if (nv1.volumes.length > 0) {
       nv1.removeVolumeByIndex(0)
     }
-    if (volumeSelect.selectedIndex > 4) {
+    if (volumeSelect.selectedIndex > 5) {
       nv1.loadMeshes([{ url: fnm }])
     } else {
       if (!fnm.endsWith('.mgz')) {
@@ -117,22 +133,67 @@ async function main() {
       console.log('No mesh open to simplify.')
       return
     }
+    startTime = Date.now()
+    const shrinkValue = Math.min(Math.max(Number(shrinkSimplePct.value) / 100, 0.01), 1)
+    if (shrinkValue >= 1)
+      return
     const verts = nv1.meshes[0].pts.slice()
     const tris = nv1.meshes[0].tris.slice()
-    const shrinkValue = Math.min(Math.max(Number(shrinkSimplePct.value) / 100, 0.01), 1)
     loadingCircle.classList.remove('hidden')
+    if (simpleWasmCheck.checked) {
+        const meshBuffer = NVMeshUtilities.createMZ3(verts, tris, false)
+        let mz3 = new Blob([meshBuffer], {
+            type: 'application/octet-stream'
+        })
+        let inName = `em${Math.round(Math.random() * 0xffffff)}.mz3`
+        let fileMZ3 = new File([mz3], inName)
+        let outName = `em${Math.round(Math.random() * 0xffffff)}.mz3`
+          Nii2meshWorker.postMessage({
+              blob: fileMZ3,
+              percentage: shrinkValue,
+              simplify_name: outName,
+          })
+    } else {
     MeshWorker.postMessage({
       verts,
       tris,
       shrinkValue
     })
+    }
   }
   applyBtn.onclick = async function () {
     if (nv1.volumes.length < 1) {
       console.log('No volume open to meshify.')
       return
     }
+    startTime = Date.now()
     const isoValue = Number(isoNumber.value)
+    const largestCheckValue = largestCheck.checked
+    const bubbleCheckValue = bubbleCheck.checked
+    const shrinkValue = Math.min(Math.max(Number(shrinkPct.value) / 100, 0.01), 1)
+    const smoothValue = smoothSlide.value
+    loadingCircle.classList.remove('hidden')
+    if (wasmCheck.checked) {
+      //const meshBuffer = NVMeshUtilities.createMZ3(verts, tris, false)
+      const niiBuffer = await nv1.saveImage().buffer
+      console.log('WASM nii2mesh', niiBuffer)
+      let nii = new Blob([niiBuffer], {
+        type: 'application/octet-stream'
+      })
+      let inName = `em${Math.round(Math.random() * 0xffffff)}.nii`
+      let fileNii = new File([nii], inName)
+      let outName = `em${Math.round(Math.random() * 0xffffff)}.mz3`
+      Nii2meshWorker.postMessage({
+          blob: fileNii,
+          percentage: shrinkValue,
+          simplify_name: outName,
+          isoValue: isoValue,
+          onlyLargest: largestCheckValue,
+          fillBubbles: bubbleCheckValue,
+          postSmooth: smoothValue
+      })
+      return
+    }
     let img = new Float32Array(nv1.volumes[0].img)
     const scl_slope = nv1.volumes[0].hdr.scl_slope
     const scl_inter = nv1.volumes[0].hdr.scl_inter
@@ -143,12 +204,7 @@ async function main() {
       }
     }
     const dims = [nv1.volumes[0].hdr.dims[1], nv1.volumes[0].hdr.dims[2], nv1.volumes[0].hdr.dims[3]]
-    const largestCheckValue = largestCheck.checked
-    const bubbleCheckValue = bubbleCheck.checked
     const affine = nv1.volumes[0].hdr.affine
-    const shrinkValue = Math.min(Math.max(Number(shrinkPct.value) / 100, 0.01), 1)
-    const smoothValue = smoothSlide.value
-    loadingCircle.classList.remove('hidden')
     VoxelWorker.postMessage(
       {
         img,
@@ -173,7 +229,7 @@ async function main() {
     nv1.setMeshShader(nv1.meshes[0].id, this.value)
   }
   function handleMeshLoaded() {
-    meshStatus()
+    meshStatus(false)
   }
   const defaults = {
     onMeshLoaded: handleMeshLoaded,
@@ -206,7 +262,8 @@ async function main() {
   nv1.opts.multiplanarForceRender = true
   nv1.opts.yoke3Dto2DZoom = true
   nv1.setInterpolation(true)
-  await nv1.loadVolumes([{ url: './bet.nii.gz' }])
+  //await nv1.loadVolumes([{ url: './bet.nii.gz' }])
+  await nv1.loadVolumes([{ url: './tinyT1.nii.gz' }])
   imageStatus()
   applyBtn.onclick()
 }

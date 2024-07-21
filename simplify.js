@@ -490,14 +490,19 @@ class QuadricSimplifyMesh {
       }
     }
     this.compactMesh()
-    const finalVs = []
+    const finalVs = new Float32Array(this.vertices.length * 3)
+    let j = 0
     for (const vertex of this.vertices) {
-      finalVs.push(vertex.p.x, vertex.p.y, vertex.p.z)
+      finalVs[j++] = vertex.p.x
+      finalVs[j++] = vertex.p.y
+      finalVs[j++] = vertex.p.z
     }
-
-    const finalTs = []
+    const finalTs = new Uint32Array(this.triangles.length * 3)
+    j = 0
     for (const triangle of this.triangles) {
-      finalTs.push(triangle.v[0], triangle.v[1], triangle.v[2])
+      finalTs[j++] = triangle.v[0]
+      finalTs[j++] = triangle.v[1]
+      finalTs[j++] = triangle.v[2]
     }
     if (verbose) {
       const pct = Math.round((100 * (finalTs.length / 3)) / triangleCount)
