@@ -1,8 +1,8 @@
 self.addEventListener('message', function(e) {
     const file = e.data.blob
-    const percentage = e.data.percentage  || 0.5;
+    const percentage = e.data.percentage  || 0.5
     const simplify_name = e.data.simplify_name
-    const isoValue = e.data.isoValue  || 0.5;
+    const isoValue = e.data.isoValue  || NaN
     onlyLargest = e.data.onlyLargest || false
     fillBubbles = e.data.fillBubbles || false
     postSmooth = e.data.postSmooth || 0

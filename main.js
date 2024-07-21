@@ -28,7 +28,7 @@ function formatNumber(value) {
 async function main() {
   const MeshWorker = await createMeshWorker()
   const VoxelWorker = await createVoxelWorker()
-  const Nii2meshWorker = new Worker('./nii2meshWorker.js?rnd=' + Math.random())
+  const Nii2meshWorker = await new Worker('./nii2meshWorker.js?rnd=' + Math.random())
   const loadingCircle = document.getElementById('loadingCircle')
   let startTime = Date.now()
   function meshStatus(isTimed = true) {
@@ -177,11 +177,11 @@ async function main() {
       //const meshBuffer = NVMeshUtilities.createMZ3(verts, tris, false)
       const niiBuffer = await nv1.saveImage().buffer
       console.log('WASM nii2mesh', niiBuffer)
-      let nii = new Blob([niiBuffer], {
+      let nii = await new Blob([niiBuffer], {
         type: 'application/octet-stream'
       })
       let inName = `em${Math.round(Math.random() * 0xffffff)}.nii`
-      let fileNii = new File([nii], inName)
+      let fileNii = await new File([nii], inName)
       let outName = `em${Math.round(Math.random() * 0xffffff)}.mz3`
       Nii2meshWorker.postMessage({
           blob: fileNii,
@@ -262,10 +262,9 @@ async function main() {
   nv1.opts.multiplanarForceRender = true
   nv1.opts.yoke3Dto2DZoom = true
   nv1.setInterpolation(true)
-  //await nv1.loadVolumes([{ url: './bet.nii.gz' }])
   await nv1.loadVolumes([{ url: './tinyT1.nii.gz' }])
   imageStatus()
-  applyBtn.onclick()
+  // applyBtn.onclick()
 }
 
 main()
