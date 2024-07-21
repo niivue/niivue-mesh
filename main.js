@@ -28,7 +28,7 @@ function formatNumber(value) {
 async function main() {
   const MeshWorker = await createMeshWorker()
   const VoxelWorker = await createVoxelWorker()
-  const Nii2meshWorker = await new Worker('./nii2meshWorker.js?rnd=' + Math.random())
+  const Nii2meshWorker = await new Worker('./nii2meshWorker.js')
   const loadingCircle = document.getElementById('loadingCircle')
   let startTime = Date.now()
   function meshStatus(isTimed = true) {

@@ -18,6 +18,14 @@ npm install
 npm run dev
 ```
 
+You can recompile the [nii2mesh Web Assembly](https://github.com/neurolabusc/nii2mesh) code 
+
+```bash
+git clone git@github.com:neurolabusc/nii2mesh.git
+cd nii2mesh/src
+make wasm
+```
+
 ### Links
 
  - [Will Usher](https://github.com/Twinklebear/webgl-marching-cubes) ported [Marching Cubes](https://paulbourke.net/geometry/polygonise/) to JavaScript.
