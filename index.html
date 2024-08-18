@@ -5,8 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="./niivue.css" />
-  <title>Niivue Mesh</title>
-  <script type="module" crossorigin src="./assets/index-cx3w3krw.js"></script>
+  <title>Niivue brain chop</title>
+  <script type="module" crossorigin src="./assets/index-CvkihRLb.js"></script>
 </head>
 
 <body>
@@ -34,6 +34,7 @@
     <button id="remeshBtn">Create Mesh</button>
     <button id="simplifyBtn">Simplify Mesh</button>
     <button id="saveBtn">Save Mesh</button>
+    <button id="aboutBtn">About</button>
     <div id="loadingCircle" class="loading-circle hidden"></div>
   </header>
   <main id="canvas-container">
@@ -46,6 +47,23 @@
         <label id="isoLabel">Isosurface Threshold</label>
         <input id="isoNumber" type="text" value="100">
       <p>
+      <p>
+        <label>Closing (mm)</label>
+        <input id="closeMM" type="number" min="0"  value="4" max="100">
+      </p>
+      <p>
+        <label>
+          Hollow:
+          <select id="hollowSelect">
+            <option value="0" selected>False: solid</option>
+            <option value="-1">1mm</option>
+            <option value="-2">2mm</option>
+            <option value="-4">4mm</option>
+            <option value="-8">8mm</option>
+            <option value="-16">16mm</option>
+          </select>
+        </label>
+      </p>
       <p>
         <input type="checkbox" id="bubbleCheck" unchecked/>
         <label>Fill bubbles</label>
@@ -69,10 +87,6 @@
         <label>Simplify Percent (1..100)</label>
         <input id="shrinkPct" type="number" min="1"  value="30" max="100">
       </p>
-      <p>
-        <input type="checkbox" id="wasmCheck" checked/>
-        <label>WASM</label>
-      </p>
       <button id="cancelBtn" formmethod="dialog">Cancel</button>
       <button autofocus id="applyBtn" value="default">Apply</button>
     </form>
@@ -81,11 +95,7 @@
     <form method="dialog">
       <p>
         <label>Simplify Percent (1..100)</label>
-        <input id="shrinkSimplePct" type="number" min="1"  value="10" max="100">
-      </p>
-      <p>
-        <input type="checkbox" id="simpleWasmCheck" checked/>
-        <label>WASM</label>
+        <input id="shrinkSimplePct" type="number" min="1"  value="30" max="100">
       </p>
       <button id="cancelBtn" formmethod="dialog">Cancel</button>
       <button autofocus id="applySimpleBtn" value="default">Apply</button>
@@ -108,5 +118,4 @@
     </form>
   </dialog>
 </body>
-
 </html>
