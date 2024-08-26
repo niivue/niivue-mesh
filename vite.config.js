@@ -18,6 +18,10 @@ export default defineConfig({
     }
   },
   worker: {
-    format: 'es',
+    format: 'esm'
+  },
+  // exclude @niivue/niimath from optimization
+  optimizeDeps: {
+    exclude: ['@niivue/niimath']
   }
 })

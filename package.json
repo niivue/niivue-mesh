@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@niivue/niimath": "^0.1.1",
     "@niivue/niivue": "^0.44.1",
     "jslint": "^0.12.1"
   },
