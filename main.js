@@ -1,4 +1,5 @@
 import { Niivue, NVMeshUtilities } from '@niivue/niivue'
+import { Niimath } from "@niivue/niimath"
 
 function formatNumber(value) {
   if (Math.abs(value) >= 1) {
@@ -10,56 +11,9 @@ function formatNumber(value) {
   }
 }
 
-class NiiMathWrapper {
-  constructor(workerScript) {
-    this.worker = new Worker(workerScript)
-  }
-  static async load(workerScript = './niimathWorker.js') {
-    return new NiiMathWrapper(workerScript)
-  }
-  niimath(niiBuffer, operationsText) {
-    return new Promise((resolve, reject) => {
-      const niiBlob = new Blob([niiBuffer], { type: 'application/octet-stream' })
-      let inName = 'input.nii' // or derive from context
-      const isMZFormat = niiBuffer.byteLength >= 2 && new Uint8Array(niiBuffer)[0] === 77 && new Uint8Array(niiBuffer)[1] === 90
-      if (isMZFormat) {
-        inName = 'input.mz3'
-      }
-      let outName = inName
-      if ((isMZFormat) || (operationsText.includes("-mesh"))) {
-        outName = 'output.mz3' // or derive from context
-      }
-      const args = operationsText.trim().split(/\s+/)
-      args.unshift(inName)
-      args.push(outName)
-      const file = new File([niiBlob], inName)
-      this.worker.onmessage = (e) => {
-        if (e.data.blob instanceof Blob) {
-          const reader = new FileReader()
-          reader.onload = () => {
-            resolve(reader.result) // return ArrayBuffer
-          }
-          reader.onerror = () => {
-            reject(new Error('Failed to read the Blob as an ArrayBuffer'))
-          }
-          reader.readAsArrayBuffer(e.data.blob)
-        } else {
-          reject(new Error('Expected Blob from worker'))
-        }
-      }
-      this.worker.onerror = (e) => {
-        reject(new Error(e.message))
-      }
-      this.worker.postMessage({ blob: file, cmd: args, outName: outName })
-    })
-  }
-  terminate() {
-    this.worker.terminate()
-  }
-}
-
 async function main() {
-  const wrapper = await NiiMathWrapper.load()
+  const niimath = new Niimath()
+  await niimath.init()
   const loadingCircle = document.getElementById('loadingCircle')
   let startTime = null
   saveBtn.onclick = function () {
@@ -139,9 +93,13 @@ async function main() {
     const tris = nv1.meshes[0].tris.slice()
     const meshBuffer = NVMeshUtilities.createMZ3(verts, tris, false)
     loadingCircle.classList.remove('hidden')
-    let ops = " -r " + reduce.toString()
-    console.log('niimath operation', ops)
-    const arrayBuffer = await wrapper.niimath(meshBuffer, ops )
+    const meshFile = new File([meshBuffer], 'mesh.mz3')
+    const retBlob = await niimath.image(meshFile)
+    .mesh({
+      r: reduce
+    })
+    .run('test.mz3')
+    const arrayBuffer = await retBlob.arrayBuffer()
     loadingCircle.classList.add('hidden')
     if (nv1.meshes.length > 0)
       nv1.removeMesh(nv1.meshes[0])
@@ -150,17 +108,13 @@ async function main() {
   applyBtn.onclick = async function () {
     startTime = Date.now()
     const niiBuffer = await nv1.saveImage({volumeByIndex: nv1.volumes.length - 1}).buffer
+    const niiFile = new File([niiBuffer], 'image.nii')
+    let processor = niimath.image(niiFile)
     loadingCircle.classList.remove('hidden')
     //mesh with specified isosurface
     const isoValue = Number(isoNumber.value)
-    let ops = "-mesh -i " + isoValue
     //const largestCheckValue = largestCheck.checked
-    if (!largestCheck.checked)
-      ops += " -l 0"
     let reduce = Math.min(Math.max(Number(shrinkPct.value) / 100, 0.01), 1)
-    ops += " -r " + reduce.toString()
-    if (bubbleCheck.checked)
-      ops += " -b 1" //fill bubbles
     let hollowSz = Number(hollowSelect.value )
     let closeSz = Number(closeMM.value)
     const pixDim = Math.min(Math.min(nv1.volumes[0].hdr.pixDims[1],nv1.volumes[0].hdr.pixDims[2]), nv1.volumes[0].hdr.pixDims[3])
@@ -169,13 +123,23 @@ async function main() {
       closeSz *= pixDim
       console.log('Very small pixels, scaling hollow and close values by ', pixDim)
     }
-    if (hollowSz < 0)
-      ops = " -hollow 0.5 "+hollowSz + ' '+ ops
-    if ((isFinite(closeSz)) && (closeSz > 0)){
-      ops = " -close " + isoValue + " "+closeSz + ' ' + 2 * closeSz + ' '+ ops
+    if (hollowSz < 0) {
+      processor = processor.hollow(0.5, hollowSz)
     }
-    console.log('niimath operation', ops)
-    const arrayBuffer = await wrapper.niimath(niiBuffer, ops )
+      // ops = " -hollow 0.5 "+hollowSz + ' '+ ops
+    if ((isFinite(closeSz)) && (closeSz > 0)){
+      processor = processor.close(isoValue, closeSz, 2 * closeSz)
+      // ops = " -close " + isoValue + " "+closeSz + ' ' + 2 * closeSz + ' '+ ops
+    }
+    processor = processor.mesh({
+      i: isoValue,
+      l: largestCheck.checked ? 1 : 0,
+      r: reduce,
+      b: bubbleCheck.checked ? 1 : 0
+    })
+    console.log('niimath operation', processor.commands)
+    const retBlob = await processor.run('test.mz3')
+    const arrayBuffer = await retBlob.arrayBuffer()
     loadingCircle.classList.add('hidden')
     if (nv1.meshes.length > 0)
       nv1.removeMesh(nv1.meshes[0])

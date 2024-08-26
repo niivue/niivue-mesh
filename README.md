@@ -1,4 +1,4 @@
-### NiiVue voxels to mesh
+### ct2print voxels to mesh
 
 A basic example of converting a voxel-based image to a simplified mesh. This interactive drag-and-drop web page allows you to create meshes that can be used with a 3D printer.
 
@@ -6,7 +6,7 @@ A basic example of converting a voxel-based image to a simplified mesh. This int
 
 ### Usage
 
-1. Open the [live demo](https://niivue.github.io/niivue-mesh/).
+1. Open the [live demo](https://niivue.github.io/ct2print/).
 2. **Option 1** Use the `Volume` pull-down menu to select an image.
 3. **Option 2** If your image is in NIfTI format, drag and drop the file onto the web page.
 4. **Option 3** If your image is in DICOM format, use the `Select DICOM` button to import your image.
@@ -28,18 +28,10 @@ A basic example of converting a voxel-based image to a simplified mesh. This int
 You can serve a hot-reloadable web page that allows you to interactively modify the source code.
 
 ```bash
-git clone https://github.com/niivue/niivue-mesh
-cd niivue-mesh
+git clone https://github.com/niivue/ct2print
+cd ct2print
 npm install
 npm run dev
-```
-
-You can recompile the [nii2mesh Web Assembly](https://github.com/neurolabusc/nii2mesh) code 
-
-```bash
-git clone git@github.com:neurolabusc/nii2mesh.git
-cd nii2mesh/src
-make wasm
 ```
 
 ### Links
